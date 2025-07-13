@@ -2,7 +2,9 @@
 
 This tool automates the complete setup of Amazon SES (Simple Email Service) for a domain, including domain verification, DKIM configuration, DNS record creation in CloudFlare, and IAM user provisioning for secure email sending.
 
-This was mostly developed by an AI beause I'm lazy. Use are your own risk.
+This was mostly developed by an AI beause I'm lazy. Use at your own risk.
+
+I developed this because I wanted an easy way to deploy WordPress sites using SES as a transactional email service. The outputs provide a copy/pasta sample for updated the WordPress config for [FluentSMTP](https://fluentsmtp.com/).
 
 ## What This Tool Does
 
