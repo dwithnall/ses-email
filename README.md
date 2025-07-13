@@ -211,6 +211,47 @@ The tool creates a dedicated IAM user with minimal permissions:
 - Cannot access other AWS services
 - Cannot modify SES configuration
 
+#### Permissions Granted to the New IAM User
+
+The script creates an IAM policy with the following permissions for the new user:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ses:SendRawEmail",
+                "ses:SendEmail"
+            ],
+            "Resource": "arn:aws:ses:{region}:{account-id}:identity/{domain}"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ses:ListIdentities",
+                "ses:GetIdentityVerificationAttributes",
+                "ses:GetIdentityDkimAttributes"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+**What these permissions allow:**
+- `ses:SendEmail` and `ses:SendRawEmail`: Send emails through SES for the specific domain
+- `ses:ListIdentities`: List SES identities (needed for some email libraries)
+- `ses:GetIdentityVerificationAttributes`: Check verification status of identities
+- `ses:GetIdentityDkimAttributes`: Retrieve DKIM configuration details
+
+**Security features:**
+- Permissions are scoped to the specific domain only
+- No administrative access to SES or other AWS services
+- Cannot modify SES configuration or create new identities
+- Cannot access other AWS resources outside of SES
+
 ### CloudFlare API Token
 - The API token has minimal required permissions
 - Only can read zones and edit DNS records
