@@ -259,6 +259,33 @@ For issues or questions:
 2. Verify all prerequisites are met
 3. Ensure credentials have correct permissions
 
+## Contributing
+
+Contributions are welcome! However, please note that I have limited time available, so I may not be able to respond to issues or pull requests promptly.
+
+### How to Contribute
+
+1. **Fork the repository**
+2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
+3. **Make your changes** and test thoroughly
+4. **Commit your changes**: `git commit -m 'Add some amazing feature'`
+5. **Push to the branch**: `git push origin feature/amazing-feature`
+6. **Open a Pull Request**
+
+### Guidelines
+
+- Please test your changes before submitting
+- Update documentation if needed
+- Keep changes focused and well-documented
+- Follow existing code style and patterns
+
+### Issues
+
+While I appreciate bug reports and feature requests, I may not have time to respond to all issues. Feel free to:
+- Fork the project and fix issues yourself
+- Submit pull requests with fixes
+- Discuss solutions in the issues
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
