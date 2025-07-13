@@ -1,0 +1,2 @@
+boto3>=1.39.0
+cloudflare>=4.3.0 
