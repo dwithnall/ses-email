@@ -140,7 +140,18 @@ python provision_ses_domain.py yourdomain.com --config my-config.ini
 
 # Use custom MAIL FROM subdomain
 python provision_ses_domain.py yourdomain.com --mail-from-subdomain email
+
+# Skip SES identity setup, IAM user creation, and SMTP credential generation
+python provision_ses_domain.py yourdomain.com --skip-ses
+
+# Skip Cloudflare DNS record creation
+python provision_ses_domain.py yourdomain.com --skip-cloudflare
+
+# Skip both SES and Cloudflare operations (only validates domain)
+python provision_ses_domain.py yourdomain.com --skip-ses --skip-cloudflare
 ```
+
+**Note:** Cloudflare DNS records require SES tokens to be created. If you use `--skip-ses` but not `--skip-cloudflare`, the script will exit with an error because it cannot create DNS records without SES tokens. To skip Cloudflare DNS record creation, use `--skip-cloudflare` (which works independently if SES operations are enabled).
 
 ### Example
 
