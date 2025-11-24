@@ -15,7 +15,7 @@ The `provision_ses_domain.py` script performs the following automated tasks:
 3. **DNS Record Creation**: Automatically creates all required DNS records in CloudFlare:
    - SES verification TXT record
    - DKIM CNAME records
-   - MX record for MAIL FROM domain
+   - MX record for MAIL FROM domain (optional for outgoing-only email)
    - SPF record for email authentication
    - DMARC record for email policy
 4. **IAM User Creation**: Creates a dedicated IAM user with minimal permissions for sending emails
@@ -147,11 +147,16 @@ python provision_ses_domain.py yourdomain.com --skip-ses
 # Skip Cloudflare DNS record creation
 python provision_ses_domain.py yourdomain.com --skip-cloudflare
 
+# Skip MX record creation (optional for outgoing-only transactional email)
+python provision_ses_domain.py yourdomain.com --skip-mx
+
 # Skip both SES and Cloudflare operations (only validates domain)
 python provision_ses_domain.py yourdomain.com --skip-ses --skip-cloudflare
 ```
 
 **Note:** Cloudflare DNS records require SES tokens to be created. If you use `--skip-ses` but not `--skip-cloudflare`, the script will exit with an error because it cannot create DNS records without SES tokens. To skip Cloudflare DNS record creation, use `--skip-cloudflare` (which works independently if SES operations are enabled).
+
+**MX Record:** The MX record is optional and only needed if you want to receive bounce/complaint notifications at the MAIL FROM subdomain. For outgoing-only transactional email, you can skip it using `--skip-mx`. SES will still work without the MX record due to `BehaviorOnMXFailure='UseDefaultValue'`.
 
 ### Example
 
@@ -197,6 +202,31 @@ define('FLUENTMAIL_AWS_SECRET_ACCESS_KEY', 'wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEK
 
 
 ```
+
+## DNS Records Created
+
+The script creates the following DNS records in CloudFlare:
+
+1. **SES Verification (TXT)** - Required
+   - Name: `_amazonses.{domain}`
+   - Purpose: Verifies domain ownership with AWS SES
+
+2. **DKIM Signing (CNAME)** - Required (3 records)
+   - Name: `{token}._domainkey.{domain}`
+   - Purpose: Enables DKIM email authentication
+
+3. **MAIL FROM (MX)** - Optional
+   - Name: `{mail-from-subdomain}.{domain}` (default: `mail.{domain}`)
+   - Purpose: Handles bounce/complaint notifications
+   - **Can be skipped with `--skip-mx` for outgoing-only transactional email**
+
+4. **SPF (TXT)** - Required
+   - Name: `{mail-from-subdomain}.{domain}`
+   - Purpose: Authorizes AWS SES to send email on your behalf
+
+5. **DMARC (TXT)** - Recommended
+   - Name: `_dmarc.{domain}`
+   - Purpose: Email authentication policy (defaults to 'none' policy)
 
 ## What Happens After Provisioning
 
@@ -292,6 +322,10 @@ The script creates an IAM policy with the following permissions for the new user
 4. **SES verification fails**
    - Wait for DNS propagation (5-30 minutes)
    - Check that all DNS records were created correctly
+
+5. **MX record not needed**
+   - For outgoing-only transactional email, use `--skip-mx` to skip MX record creation
+   - The MX record is only needed for receiving bounce/complaint notifications at the MAIL FROM subdomain
 
 ### Log Files
 - Check the generated log file for detailed error information

@@ -71,6 +71,7 @@ def main():
     parser.add_argument("--mail-from-subdomain", default="mail", help="Subdomain for the custom MAIL FROM address (e.g., 'mail' for mail.example.com)")
     parser.add_argument("--skip-ses", action="store_true", help="Skip SES identity setup, IAM user creation, and SMTP credential generation")
     parser.add_argument("--skip-cloudflare", action="store_true", help="Skip Cloudflare DNS record creation")
+    parser.add_argument("--skip-mx", action="store_true", help="Skip MX record creation (optional for outgoing-only transactional email)")
     args = parser.parse_args()
 
     domain_name = args.domain
@@ -272,12 +273,84 @@ def main():
         create_cf_record(cf_client, zone_id, 'TXT', f"_amazonses.{domain_name}", ses_txt_token)
         for token in dkim_tokens:
             create_cf_record(cf_client, zone_id, 'CNAME', f"{token}._domainkey.{domain_name}", f"{token}.dkim.amazonses.com")
-        create_cf_record(cf_client, zone_id, 'MX', mail_from_subdomain, f"feedback-smtp.{aws_region}.amazonses.com", priority=10)
+        if not args.skip_mx:
+            create_cf_record(cf_client, zone_id, 'MX', mail_from_subdomain, f"feedback-smtp.{aws_region}.amazonses.com", priority=10)
         create_cf_record(cf_client, zone_id, 'TXT', mail_from_subdomain, '"v=spf1 include:amazonses.com ~all"')
         create_cf_record(cf_client, zone_id, 'TXT', f"_dmarc.{domain_name}", f"v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name};")
         log_print("  > Note: DMARC record created with a 'none' policy. You can strengthen this to 'quarantine' or 'reject' later.")
+        if args.skip_mx:
+            log_print("  > Note: MX record skipped (optional for outgoing-only transactional email)")
+        
+        # Output DNS settings summary to log
+        log_print(f"\n  > DNS Records Created/Updated:")
+        record_num = 1
+        log_print(f"    {record_num}. TXT Record: _amazonses.{domain_name} = {ses_txt_token}")
+        record_num += 1
+        for token in dkim_tokens:
+            log_print(f"    {record_num}. CNAME Record: {token}._domainkey.{domain_name} -> {token}.dkim.amazonses.com")
+            record_num += 1
+        if not args.skip_mx:
+            log_print(f"    {record_num}. MX Record: {mail_from_subdomain} -> feedback-smtp.{aws_region}.amazonses.com (Priority: 10)")
+            record_num += 1
+        log_print(f"    {record_num}. TXT Record: {mail_from_subdomain} = \"v=spf1 include:amazonses.com ~all\"")
+        record_num += 1
+        log_print(f"    {record_num}. TXT Record: _dmarc.{domain_name} = v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name};")
     else:
         log_print(f"\n[Step 6/7] Skipping Cloudflare DNS record creation (--skip-cloudflare flag set)")
+        if not args.skip_ses and ses_txt_token and dkim_tokens:
+            log_print(f"\n  > Required DNS Records (create these manually in your DNS provider):")
+            log_print(f"\n  {'='*70}")
+            log_print(f"  DNS RECORD #1 - Domain Verification (TXT)")
+            log_print(f"  {'='*70}")
+            log_print(f"  Type:    TXT")
+            log_print(f"  Name:    _amazonses.{domain_name}")
+            log_print(f"  Value:   {ses_txt_token}")
+            log_print(f"  TTL:     3600 (or your provider's default)")
+            log_print()
+            log_print(f"  {'='*70}")
+            log_print(f"  DNS RECORDS #2 - DKIM Signing (CNAME)")
+            log_print(f"  {'='*70}")
+            for i, token in enumerate(dkim_tokens, 1):
+                log_print(f"  Record {i}:")
+                log_print(f"    Type:    CNAME")
+                log_print(f"    Name:    {token}._domainkey.{domain_name}")
+                log_print(f"    Value:   {token}.dkim.amazonses.com")
+                log_print(f"    TTL:     3600 (or your provider's default)")
+                if i < len(dkim_tokens):
+                    log_print()
+            log_print()
+            record_num = 3
+            if not args.skip_mx:
+                log_print(f"  {'='*70}")
+                log_print(f"  DNS RECORD #{record_num} - MAIL FROM (MX)")
+                log_print(f"  {'='*70}")
+                log_print(f"  Type:    MX")
+                log_print(f"  Name:    {mail_from_subdomain}")
+                log_print(f"  Value:   feedback-smtp.{aws_region}.amazonses.com")
+                log_print(f"  Priority: 10")
+                log_print(f"  TTL:     3600 (or your provider's default)")
+                log_print(f"  Note:    Optional for outgoing-only transactional email")
+                log_print()
+                record_num += 1
+            log_print(f"  {'='*70}")
+            log_print(f"  DNS RECORD #{record_num} - SPF (TXT)")
+            log_print(f"  {'='*70}")
+            log_print(f"  Type:    TXT")
+            log_print(f"  Name:    {mail_from_subdomain}")
+            log_print(f"  Value:   \"v=spf1 include:amazonses.com ~all\"")
+            log_print(f"  TTL:     3600 (or your provider's default)")
+            log_print()
+            record_num += 1
+            log_print(f"  {'='*70}")
+            log_print(f"  DNS RECORD #{record_num} - DMARC (TXT)")
+            log_print(f"  {'='*70}")
+            log_print(f"  Type:    TXT")
+            log_print(f"  Name:    _dmarc.{domain_name}")
+            log_print(f"  Value:   v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name};")
+            log_print(f"  TTL:     3600 (or your provider's default)")
+            log_print(f"  Note:    DMARC is set to 'none' policy. You can strengthen this to")
+            log_print(f"           'quarantine' or 'reject' later.")
+            log_print(f"  {'='*70}")
 
     # --- 8. Output Final Credentials and Instructions ---
     log_print("\n--- ✅ Provisioning Complete! ✅ ---")
