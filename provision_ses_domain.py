@@ -367,7 +367,7 @@ def main():
         log_print(f"  AWS_REGION:            {aws_region}")
         log_print()
         log_print("SES SMTP CREDENTIALS (for email sending):")
-        log_print(f"  SES SMTP Endpoint:     smtp.mail.{aws_region}.amazonaws.com")
+        log_print(f"  SES SMTP Endpoint:     email-smtp.mail.{aws_region}.amazonaws.com")
         log_print(f"  SMTP Username:         {smtp_user}")
         log_print(f"  SMTP Password:         {smtp_pass}")
         log_print()
