@@ -20,7 +20,8 @@ The `provision_ses_domain.py` script performs the following automated tasks:
    - DMARC record for email policy
 4. **IAM User Creation**: Creates a dedicated IAM user with minimal permissions for sending emails
 5. **SMTP Credentials**: Generates secure SMTP credentials for your applications
-6. **Comprehensive Logging**: Creates detailed logs of all operations
+6. **Feedback Email Configuration**: Optionally configures SES feedback forwarding for bounces and complaints
+7. **Comprehensive Logging**: Creates detailed logs of all operations
 
 ## Prerequisites
 
@@ -75,7 +76,14 @@ Use the JSON editor and paste the following policy.
                 "iam:AttachUserPolicy",
                 "iam:CreateAccessKey",
                 "iam:GetUser",
-                "iam:GetPolicy"
+                "iam:GetPolicy",
+                "iam:DetachUserPolicy",
+                "iam:ListAccessKeys",
+                "iam:DeleteAccessKey",
+                "iam:DeleteUser",
+                "iam:ListPolicyVersions",
+                "iam:DeletePolicyVersion",
+                "iam:DeletePolicy"
             ],
             "Resource": "*"
         },
@@ -91,6 +99,17 @@ Use the JSON editor and paste the following policy.
 
 Attach this policy to the IAM user or role that you will use to run the script.
 Generate and configure the Access Key and Secret for this script-running user.
+
+**Note:** The IAM permissions include both creation and deletion operations. If you only need to provision domains (not remove them), you can remove the deletion-related permissions:
+- `iam:DetachUserPolicy`
+- `iam:ListAccessKeys`
+- `iam:DeleteAccessKey`
+- `iam:DeleteUser`
+- `iam:ListPolicyVersions`
+- `iam:DeletePolicyVersion`
+- `iam:DeletePolicy`
+
+However, if you want to use the `--remove-aws-resources` flag, all permissions listed above are required.
 
 
 ### Step 2: Create CloudFlare API Token
@@ -124,6 +143,8 @@ api_token = YOUR_CLOUDFLARE_API_TOKEN
 
 **Important**: Replace the placeholder values with your actual credentials.
 
+**Note**: If you use the `--no-cloudflare` flag, you can omit the `[Cloudflare]` section from your config file.
+
 ## Usage
 
 ### Basic Usage
@@ -140,6 +161,109 @@ python provision_ses_domain.py yourdomain.com --config my-config.ini
 
 # Use custom MAIL FROM subdomain
 python provision_ses_domain.py yourdomain.com --mail-from-subdomain email
+
+# Skip CloudFlare integration (manual DNS setup required)
+python provision_ses_domain.py yourdomain.com --no-cloudflare
+
+# Enable SES feedback email forwarding for bounces and complaints
+python provision_ses_domain.py yourdomain.com --enable-feedback
+
+# Remove all SES-related DNS records from CloudFlare
+python provision_ses_domain.py yourdomain.com --remove-cloudflare-records
+
+# Remove IAM user and policy for this domain
+python provision_ses_domain.py yourdomain.com --remove-aws-resources
+```
+
+### Using Without CloudFlare
+
+If you don't use CloudFlare for DNS management, you can use the `--no-cloudflare` flag to skip CloudFlare integration:
+
+```bash
+python provision_ses_domain.py yourdomain.com --no-cloudflare
+```
+
+When using this option:
+- The script will still configure SES and create the IAM user
+- You'll need to manually create the DNS records in your DNS provider
+- The script will output the exact DNS records you need to create
+- No CloudFlare API token is required in your config file
+
+### SES Feedback Email
+
+By default, SES feedback email forwarding is **disabled**. This means you won't receive notifications for bounces and complaints.
+
+To enable feedback email forwarding, use the `--enable-feedback` flag:
+
+```bash
+python provision_ses_domain.py yourdomain.com --enable-feedback
+```
+
+**What feedback emails include:**
+- **Bounce notifications**: When emails cannot be delivered
+- **Complaint notifications**: When recipients mark emails as spam
+- **Delivery notifications**: When emails are successfully delivered
+
+**Important considerations:**
+- Feedback emails are sent to the address specified in the `Return-Path` header of your emails
+- Ensure you monitor the feedback email address to handle bounces and complaints
+- High bounce and complaint rates can affect your sending reputation
+- You can combine this with other flags: `--enable-feedback --no-cloudflare`
+
+### Removing CloudFlare DNS Records
+
+To remove all SES-related DNS records from CloudFlare for a domain, use the `--remove-cloudflare-records` flag:
+
+```bash
+python provision_ses_domain.py yourdomain.com --remove-cloudflare-records
+```
+
+**What gets removed:**
+- SES domain verification TXT record (`_amazonses.{domain}`)
+- All DKIM CNAME records (`{token}._domainkey.{domain}`)
+- MAIL FROM MX record
+- MAIL FROM SPF TXT record
+- DMARC TXT record (`_dmarc.{domain}`)
+
+**Important notes:**
+- This operation only removes DNS records from CloudFlare
+- It does NOT remove the SES identity or IAM user from AWS
+- You must have CloudFlare configured (cannot use with `--no-cloudflare`)
+- This is useful when reprovisioning a domain or cleaning up after decommissioning
+
+### Removing AWS IAM Resources
+
+To remove the IAM user and policy created for a domain, use the `--remove-aws-resources` flag:
+
+```bash
+python provision_ses_domain.py yourdomain.com --remove-aws-resources
+```
+
+**What gets removed:**
+- IAM user (`ses-sender-{domain}`)
+- All access keys associated with the user
+- IAM policy (`ses-send-only-{domain}`)
+- Policy attachments from the user
+
+**Important notes:**
+- **Required Permissions**: Your AWS user must have the following IAM permissions to use this feature:
+  - `iam:DetachUserPolicy`
+  - `iam:ListAccessKeys`
+  - `iam:DeleteAccessKey`
+  - `iam:DeleteUser`
+  - `iam:ListPolicyVersions`
+  - `iam:DeletePolicyVersion`
+  - `iam:DeletePolicy`
+- This operation only removes IAM resources (user and policy)
+- It does NOT remove the SES identity or DNS records
+- The policy will only be deleted if it's not attached to other entities
+- Access keys are deleted before the user is removed
+- This is useful when decommissioning a domain or cleaning up resources
+
+**Note:** You can combine cleanup flags:
+```bash
+# Remove both CloudFlare DNS records and AWS IAM resources
+python provision_ses_domain.py yourdomain.com --remove-cloudflare-records --remove-aws-resources
 ```
 
 ### Example
@@ -232,7 +356,8 @@ The script creates an IAM policy with the following permissions for the new user
             "Action": [
                 "ses:ListIdentities",
                 "ses:GetIdentityVerificationAttributes",
-                "ses:GetIdentityDkimAttributes"
+                "ses:GetIdentityDkimAttributes",
+                "ses:SetIdentityFeedbackForwardingEnabled"
             ],
             "Resource": "*"
         }
@@ -245,6 +370,7 @@ The script creates an IAM policy with the following permissions for the new user
 - `ses:ListIdentities`: List SES identities (needed for some email libraries)
 - `ses:GetIdentityVerificationAttributes`: Check verification status of identities
 - `ses:GetIdentityDkimAttributes`: Retrieve DKIM configuration details
+- `ses:SetIdentityFeedbackForwardingEnabled`: Configure feedback email forwarding for bounces and complaints
 
 **Security features:**
 - Permissions are scoped to the specific domain only
