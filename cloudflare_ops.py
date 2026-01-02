@@ -69,77 +69,88 @@ def create_cf_record(cf_client, zone_id, record_type, name, content, ttl=3600, p
             return False
 
 
-def create_ses_dns_records(cf_client, zone_id, domain_name, mail_from_subdomain, aws_region, ses_txt_token, dkim_tokens):
+def create_ses_dns_records(cf_client, zone_id, domain_name, mail_from_subdomain, aws_region, ses_txt_token, dkim_tokens, skip_mx=False):
     """Create all required SES DNS records in CloudFlare."""
-    log_print(f"\n[Step 6/7] Creating all required DNS records in CloudFlare...")
+    log_print("\n[Step 6/7] Creating all required DNS records in CloudFlare...")
     
     create_cf_record(cf_client, zone_id, 'TXT', f"_amazonses.{domain_name}", ses_txt_token)
     for token in dkim_tokens:
         create_cf_record(cf_client, zone_id, 'CNAME', f"{token}._domainkey.{domain_name}", f"{token}.dkim.amazonses.com")
-    create_cf_record(cf_client, zone_id, 'MX', mail_from_subdomain, f"feedback-smtp.{aws_region}.amazonses.com", priority=10)
+    
+    # MX record is optional for outgoing-only transactional email
+    if not skip_mx:
+        create_cf_record(cf_client, zone_id, 'MX', mail_from_subdomain, f"feedback-smtp.{aws_region}.amazonses.com", priority=10)
+    else:
+        log_print("  > Skipping MX record creation (--skip-mx flag).")
+    
     create_cf_record(cf_client, zone_id, 'TXT', mail_from_subdomain, '"v=spf1 include:amazonses.com ~all"')
     create_cf_record(cf_client, zone_id, 'TXT', f"_dmarc.{domain_name}", f"v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name};")
     log_print("  > Note: DMARC record created with a 'none' policy. You can strengthen this to 'quarantine' or 'reject' later.")
+
+
+def _is_ses_record(record, domain_name, mail_from_subdomain, aws_region):
+    """Check if a DNS record is SES-related."""
+    record_name = record.name
+    record_type = record.type
+    record_content = record.content
+    
+    # Patterns to identify SES-related records
+    ses_patterns = [
+        ('TXT', f'_amazonses.{domain_name}'),
+        ('CNAME', f'_domainkey.{domain_name}'),
+        ('MX', mail_from_subdomain),
+        ('TXT', mail_from_subdomain),
+        ('TXT', f'_dmarc.{domain_name}'),
+    ]
+    
+    # Check exact matches
+    if (record_type, record_name) in ses_patterns:
+        return True
+    
+    # Check DKIM CNAME records
+    if record_type == 'CNAME' and f'._domainkey.{domain_name}' in record_name:
+        return 'dkim.amazonses.com' in record_content
+    
+    # Check MAIL FROM MX record
+    if record_type == 'MX' and record_name == mail_from_subdomain:
+        return f'feedback-smtp.{aws_region}.amazonses.com' in record_content
+    
+    # Check SPF record
+    if record_type == 'TXT' and record_name == mail_from_subdomain:
+        return 'amazonses.com' in record_content or 'v=spf1' in record_content
+    
+    return False
+
+
+def _delete_record(cf_client, zone_id, record):
+    """Delete a DNS record and return True if successful."""
+    record_name = record.name
+    record_type = record.type
+    record_content = record.content
+    
+    try:
+        log_print(f"  > Removing {record_type} record: {record_name} -> {record_content[:70]}...")
+        cf_client.dns.records.delete(zone_id=zone_id, dns_record_id=record.id)
+        log_print(f"    - Success: Record '{record_name}' removed.")
+        return True
+    except Exception as e:
+        log_print(f"    - Error removing record '{record_name}': {e}")
+        return False
 
 
 def remove_ses_records_from_cloudflare(cf_client, zone_id, domain_name, mail_from_subdomain, aws_region):
     """Remove all SES-related DNS records from CloudFlare for a domain."""
     log_print(f"\n[Cleanup] Removing SES-related DNS records from CloudFlare for '{domain_name}'...")
     
-    # Patterns to identify SES-related records
-    ses_patterns = [
-        # SES verification record
-        ('TXT', f'_amazonses.{domain_name}'),
-        # DKIM records (CNAME records with _domainkey subdomain)
-        ('CNAME', f'_domainkey.{domain_name}'),
-        # MAIL FROM MX record
-        ('MX', mail_from_subdomain),
-        # MAIL FROM SPF record
-        ('TXT', mail_from_subdomain),
-        # DMARC record
-        ('TXT', f'_dmarc.{domain_name}'),
-    ]
-    
     try:
-        # Get all DNS records for the zone
         records_response = cf_client.dns.records.list(zone_id=zone_id)
         all_records = records_response.result
         
         removed_count = 0
-        
         for record in all_records:
-            record_name = record.name
-            record_type = record.type
-            record_content = record.content
-            
-            # Check if this record matches any SES pattern
-            should_remove = False
-            
-            # Check exact matches for specific records
-            if (record_type, record_name) in ses_patterns:
-                should_remove = True
-            # Check for DKIM CNAME records (they have token._domainkey.domain format)
-            elif record_type == 'CNAME' and f'._domainkey.{domain_name}' in record_name:
-                # Also verify it points to amazonses.com
-                if 'dkim.amazonses.com' in record_content:
-                    should_remove = True
-            # Check for MAIL FROM MX record pointing to SES
-            elif record_type == 'MX' and record_name == mail_from_subdomain:
-                if f'feedback-smtp.{aws_region}.amazonses.com' in record_content:
-                    should_remove = True
-            # Check for SPF record on MAIL FROM subdomain
-            elif record_type == 'TXT' and record_name == mail_from_subdomain:
-                if 'amazonses.com' in record_content or 'v=spf1' in record_content:
-                    should_remove = True
-            
-            if should_remove:
-                try:
-                    log_print(f"  > Removing {record_type} record: {record_name} -> {record_content[:70]}...")
-                    cf_client.dns.records.delete(zone_id=zone_id, dns_record_id=record.id)
-                    log_print(f"    - Success: Record '{record_name}' removed.")
+            if _is_ses_record(record, domain_name, mail_from_subdomain, aws_region):
+                if _delete_record(cf_client, zone_id, record):
                     removed_count += 1
-                except Exception as e:
-                    log_print(f"    - Error removing record '{record_name}': {e}")
         
         if removed_count == 0:
             log_print("  > No SES-related DNS records found to remove.")

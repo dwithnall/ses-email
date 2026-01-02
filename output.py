@@ -48,14 +48,20 @@ def print_credentials(smtp_user, smtp_pass, aws_region, domain_name, enable_feed
         log_print(f"4.  **DMARC Reports**: Ensure the mailbox `dmarc-reports@{domain_name}` exists to receive reports. By default DMARC is set to 'none'.")
 
 
-def print_manual_dns_records(domain_name, mail_from_subdomain, aws_region, ses_txt_token, dkim_tokens):
+def print_manual_dns_records(domain_name, mail_from_subdomain, aws_region, ses_txt_token, dkim_tokens, skip_mx=False):
     """Print manual DNS record instructions when CloudFlare is disabled."""
-    log_print("\n[Step 6/7] Skipping CloudFlare DNS record creation (--no-cloudflare flag).")
+    log_print("\n[Step 6/7] Skipping CloudFlare DNS record creation (--no-cloudflare or --skip-cloudflare flag).")
     log_print("  > You will need to manually create the following DNS records:")
     log_print(f"  > TXT Record: _amazonses.{domain_name} = {ses_txt_token}")
     for token in dkim_tokens:
         log_print(f"  > CNAME Record: {token}._domainkey.{domain_name} = {token}.dkim.amazonses.com")
-    log_print(f"  > MX Record: {mail_from_subdomain} = feedback-smtp.{aws_region}.amazonses.com (Priority: 10)")
+    
+    # MX record is optional
+    if not skip_mx:
+        log_print(f"  > MX Record: {mail_from_subdomain} = feedback-smtp.{aws_region}.amazonses.com (Priority: 10)")
+    else:
+        log_print(f"  > MX Record: {mail_from_subdomain} = feedback-smtp.{aws_region}.amazonses.com (Priority: 10) [SKIPPED - optional for outgoing-only email]")
+    
     log_print(f"  > TXT Record: {mail_from_subdomain} = \"v=spf1 include:amazonses.com ~all\"")
     log_print(f"  > TXT Record: _dmarc.{domain_name} = \"v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name};\"")
 

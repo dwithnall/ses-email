@@ -33,6 +33,9 @@ def main():
     parser.add_argument("--enable-feedback", action="store_true", help="Enable SES feedback email forwarding for bounces and complaints")
     parser.add_argument("--remove-cloudflare-records", action="store_true", help="Remove all SES-related DNS records from CloudFlare for this domain")
     parser.add_argument("--remove-aws-resources", action="store_true", help="Remove IAM user and policy for this domain")
+    parser.add_argument("--skip-ses", action="store_true", help="Skip SES identity setup, IAM user creation, and SMTP credential generation")
+    parser.add_argument("--skip-cloudflare", action="store_true", help="Skip Cloudflare DNS record creation")
+    parser.add_argument("--skip-mx", action="store_true", help="Skip MX record creation (optional for outgoing-only transactional email)")
     args = parser.parse_args()
 
     domain_name = args.domain
