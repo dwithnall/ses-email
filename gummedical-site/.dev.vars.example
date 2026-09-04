@@ -1,0 +1,7 @@
+# Copy this file to .dev.vars for local `wrangler dev` testing.
+# .dev.vars is gitignored and must never be committed.
+
+RESEND_API_KEY=re_placeholder_get_a_real_key_from_resend.com
+CONTACT_TO_EMAIL=info@gummedical.com.au
+CONTACT_FROM_EMAIL=website@gummedical.com.au
+NEWSLETTER_TO_EMAIL=info@gummedical.com.au

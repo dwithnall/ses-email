@@ -1,0 +1,22 @@
+name = "gummedical-site"
+main = "worker/index.ts"
+compatibility_date = "2024-11-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Uncomment and set once the Cloudflare zone for gummedical.com.au is ready:
+# [[routes]]
+# pattern = "gummedical.com.au/*"
+# zone_name = "gummedical.com.au"
+
+[vars]
+# Non-secret defaults; override per-environment with `wrangler secret put` for real deploys.
+CONTACT_TO_EMAIL = "info@gummedical.com.au"
+CONTACT_FROM_EMAIL = "website@gummedical.com.au"
+NEWSLETTER_TO_EMAIL = "info@gummedical.com.au"
+
+# RESEND_API_KEY is a secret, not a var — set it with:
+#   wrangler secret put RESEND_API_KEY
