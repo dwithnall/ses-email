@@ -13,8 +13,13 @@ from cloudflare_ops import (
     remove_ses_records_from_cloudflare
 )
 from ses_ops import configure_ses_identity
-from iam_ops import create_iam_user_and_policy, create_smtp_credentials, remove_iam_user_and_policy
-from output import print_credentials, print_manual_dns_records
+from iam_ops import (
+    create_iam_user_and_policy,
+    create_smtp_credentials,
+    remove_iam_user_and_policy,
+    regenerate_access_key
+)
+from output import print_credentials, print_manual_dns_records, print_regenerated_credentials
 
 
 def main():
@@ -33,10 +38,14 @@ def main():
     parser.add_argument("--enable-feedback", action="store_true", help="Enable SES feedback email forwarding for bounces and complaints")
     parser.add_argument("--remove-cloudflare-records", action="store_true", help="Remove all SES-related DNS records from CloudFlare for this domain")
     parser.add_argument("--remove-aws-resources", action="store_true", help="Remove IAM user and policy for this domain")
+    parser.add_argument("--regenerate-keys", action="store_true", help="Create a new access key for an already-provisioned domain and delete the old one(s).\nSkips SES and Cloudflare.")
     parser.add_argument("--skip-ses", action="store_true", help="Skip SES identity setup, IAM user creation, and SMTP credential generation")
     parser.add_argument("--skip-cloudflare", action="store_true", help="Skip Cloudflare DNS record creation")
     parser.add_argument("--skip-mx", action="store_true", help="Skip MX record creation (optional for outgoing-only transactional email)")
     args = parser.parse_args()
+
+    if args.regenerate_keys and (args.remove_aws_resources or args.remove_cloudflare_records):
+        parser.error("--regenerate-keys cannot be combined with --remove-aws-resources or --remove-cloudflare-records")
 
     domain_name = args.domain
     mail_from_subdomain = f"{args.mail_from_subdomain}.{domain_name}"
@@ -45,11 +54,19 @@ def main():
     log_filename = init_log_file(domain_name)
 
     # Load configuration
-    aws_config, cf_api_token = load_config(args.config, require_cloudflare=not args.no_cloudflare)
+    aws_config, cf_api_token = load_config(args.config, require_cloudflare=not (args.no_cloudflare or args.regenerate_keys))
 
     # Initialize AWS clients
     ses_client, iam_client, _, aws_account_id = init_aws_clients(aws_config)
     
+    # Regenerate keys for an existing domain, then stop
+    if args.regenerate_keys:
+        new_key_id, new_secret = regenerate_access_key(iam_client, domain_name)
+        print_regenerated_credentials(new_key_id, new_secret, aws_config['region'])
+        log_print(f"\nLog file saved: {log_filename}")
+        close_log_file()
+        sys.exit(0)
+
     # Handle cleanup operations if requested
     cleanup_performed = False
     

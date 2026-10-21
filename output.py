@@ -3,10 +3,8 @@
 from utils import log_print
 
 
-def print_credentials(smtp_user, smtp_pass, aws_region, domain_name, enable_feedback, no_cloudflare):
-    """Print all credentials and final instructions."""
-    log_print("\n--- ✅ Provisioning Complete! ✅ ---")
-    log_print("\n[Step 7/7] Your application credentials are listed below.")
+def print_credentials_block(smtp_user, smtp_pass, aws_region):
+    """Print the credentials banner (AWS keys, SMTP details, FluentMail define() lines)."""
     log_print("\n" + "="*60)
     log_print("      SAVE THESE CREDENTIALS NOW. YOU CANNOT RETRIEVE THE      ")
     log_print("             SECRET KEY AGAIN AFTER THIS.                      ")
@@ -27,7 +25,23 @@ def print_credentials(smtp_user, smtp_pass, aws_region, domain_name, enable_feed
     log_print(f"define('FLUENTMAIL_AWS_SECRET_ACCESS_KEY', '{smtp_pass}');")
     log_print()
     log_print("="*60)
-    
+
+
+def print_regenerated_credentials(smtp_user, smtp_pass, aws_region):
+    """Print new credentials after a key regeneration."""
+    log_print("\n--- ✅ Access Key Regenerated! ✅ ---")
+    print_credentials_block(smtp_user, smtp_pass, aws_region)
+    log_print("\n### What To Do Next ###")
+    log_print("1.  **Update your site**: Replace the old keys in wp-config.php (or wherever they are used).")
+    log_print("    The old key has been deleted, so sending will fail until the new key is in place.")
+
+
+def print_credentials(smtp_user, smtp_pass, aws_region, domain_name, enable_feedback, no_cloudflare):
+    """Print all credentials and final instructions."""
+    log_print("\n--- ✅ Provisioning Complete! ✅ ---")
+    log_print("\n[Step 7/7] Your application credentials are listed below.")
+    print_credentials_block(smtp_user, smtp_pass, aws_region)
+
     if enable_feedback:
         log_print("\n📧 SES Feedback Email: ENABLED")
         log_print("  > You will receive notifications for bounces and complaints")

@@ -93,6 +93,70 @@ def create_smtp_credentials(iam_client, iam_user_name):
         sys.exit(1)
 
 
+def regenerate_access_key(iam_client, domain_name):
+    """
+    Replace the access key for an existing domain's IAM user.
+
+    Creates a new key, then deletes the old one(s). IAM allows at most two keys
+    per user, so if the user already has two, the oldest is deleted first.
+
+    Args:
+        iam_client: Boto3 IAM client
+        domain_name: Domain name
+
+    Returns:
+        tuple: (access_key_id, secret_access_key)
+    """
+    iam_user_name = f"ses-sender-{domain_name.replace('.', '-')}"
+    log_print(f"\n[Regenerate] Regenerating access key for user '{iam_user_name}'...")
+
+    try:
+        iam_client.get_user(UserName=iam_user_name)
+    except iam_client.exceptions.NoSuchEntityException:
+        log_print(f"  > Error: IAM User '{iam_user_name}' does not exist.", file=sys.stderr)
+        log_print(f"  > Provision the domain first: python provision_ses_domain.py {domain_name}", file=sys.stderr)
+        sys.exit(1)
+    except ClientError as e:
+        log_print(f"  > Error looking up IAM User '{iam_user_name}': {e}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        old_keys = iam_client.list_access_keys(UserName=iam_user_name).get('AccessKeyMetadata', [])
+    except ClientError as e:
+        log_print(f"  > Error listing access keys: {e}", file=sys.stderr)
+        sys.exit(1)
+    old_keys.sort(key=lambda k: k['CreateDate'])
+    log_print(f"  > Found {len(old_keys)} existing access key(s).")
+
+    def delete_key(key_id):
+        try:
+            iam_client.delete_access_key(UserName=iam_user_name, AccessKeyId=key_id)
+            log_print(f"    - Deleted old access key '{key_id}'.")
+        except ClientError as e:
+            log_print(f"    - Warning: Could not delete access key '{key_id}': {e}")
+
+    # Make room if the user is at the two-key limit
+    while len(old_keys) >= 2:
+        log_print("  > User is at the 2-key limit. Deleting the oldest key first...")
+        delete_key(old_keys.pop(0)['AccessKeyId'])
+
+    try:
+        keys = iam_client.create_access_key(UserName=iam_user_name)
+    except ClientError as e:
+        log_print(f"  > Error creating access key: {e}", file=sys.stderr)
+        sys.exit(1)
+    new_id = keys['AccessKey']['AccessKeyId']
+    new_secret = keys['AccessKey']['SecretAccessKey']
+    log_print(f"  > Success: New access key '{new_id}' created.")
+
+    if old_keys:
+        log_print("  > Deleting remaining old access key(s)...")
+        for key in old_keys:
+            delete_key(key['AccessKeyId'])
+
+    return new_id, new_secret
+
+
 def remove_iam_user_and_policy(iam_client, domain_name, aws_account_id):
     """
     Remove IAM user and policy for a domain.
