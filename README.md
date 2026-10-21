@@ -109,7 +109,7 @@ Generate and configure the Access Key and Secret for this script-running user.
 - `iam:DeletePolicyVersion`
 - `iam:DeletePolicy`
 
-However, if you want to use the `--remove-aws-resources` flag, all permissions listed above are required.
+However, if you want to use the `--remove-aws-resources` flag, all permissions listed above are required. The `--regenerate-keys` flag needs `iam:GetUser`, `iam:ListAccessKeys`, `iam:CreateAccessKey` and `iam:DeleteAccessKey`.
 
 
 ### Step 2: Create CloudFlare API Token
@@ -173,6 +173,9 @@ python provision_ses_domain.py yourdomain.com --remove-cloudflare-records
 
 # Remove IAM user and policy for this domain
 python provision_ses_domain.py yourdomain.com --remove-aws-resources
+
+# Replace the access key for an already-provisioned domain
+python provision_ses_domain.py yourdomain.com --regenerate-keys
 ```
 
 ### Using Without CloudFlare
@@ -259,6 +262,25 @@ python provision_ses_domain.py yourdomain.com --remove-aws-resources
 - The policy will only be deleted if it's not attached to other entities
 - Access keys are deleted before the user is removed
 - This is useful when decommissioning a domain or cleaning up resources
+
+### Regenerating Access Keys
+
+If you've lost the credentials for a domain, or want to rotate them, use the `--regenerate-keys` flag:
+
+```bash
+python provision_ses_domain.py yourdomain.com --regenerate-keys
+```
+
+**What it does:**
+- Checks that the IAM user `ses-sender-{domain}` exists (provision the domain first if it doesn't)
+- Creates a new access key and prints it in the same format as a normal run (AWS keys, SMTP details, FluentMail `define()` lines)
+- Deletes the user's old access key(s). IAM allows two keys per user, so if two already exist, the oldest is deleted before the new one is created
+
+**Important notes:**
+- The old key stops working immediately, so update your site's config straight away
+- SES and Cloudflare are not touched, and the `[Cloudflare]` config section is not needed
+- Cannot be combined with `--remove-aws-resources` or `--remove-cloudflare-records`
+- **Required Permissions**: `iam:GetUser`, `iam:ListAccessKeys`, `iam:CreateAccessKey`, `iam:DeleteAccessKey`
 
 **Note:** You can combine cleanup flags:
 ```bash
@@ -493,4 +515,4 @@ The MIT License is one of the most permissive open source licenses, allowing you
 - Use it privately
 - Sublicense it
 
-The only requirement is that you include the original copyright notice and license text when redistributing. 
+The only requirement is that you include the original copyright notice and license text when redistributing. 
