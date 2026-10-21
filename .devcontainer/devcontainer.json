@@ -1,0 +1,34 @@
+{
+  "name": "ses-email",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {},
+    // Puts the `claude` CLI on PATH (the VS Code extension bundles its own copy, but the CLI's
+    // /login supports pasting the auth code, which works when the browser callback can't reach the container).
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+  },
+  "mounts": [
+    // Share the Windows Claude Code config dir (incl. .credentials.json) so the container reuses your login.
+    // Paths are WSL paths to the Windows profile because VS Code runs Docker via WSL
+    // (dev.containers.executeInWSL), where ${localEnv:HOME} is the WSL home, not C:\Users\<you>.
+    // Docker silently creates an empty root-owned dir if a source is missing, so keep these accurate.
+    "source=/mnt/c/Users/dave/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
+    // ~/.claude.json holds account/onboarding state; without it Claude Code starts a fresh login.
+    // Mounted read-only to a staging path and copied in, because Claude rewrites it atomically
+    // (temp file + rename), which fails on a single-file bind mount.
+    "source=/mnt/c/Users/dave/.claude.json,target=/tmp/host-claude.json,type=bind,readonly"
+  ],
+  "postCreateCommand": {
+    "deps": "pip install --user -r requirements.txt",
+    "claude-state": "if [ ! -e ~/.claude.json ] && [ -f /tmp/host-claude.json ]; then cp /tmp/host-claude.json ~/.claude.json; fi"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "Anthropic.claude-code"
+      ]
+    }
+  }
+}
